@@ -29,6 +29,7 @@
       -webkit-tap-highlight-color: transparent; 
       transition: background-color 0.5s; 
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow-x: hidden;
     }
     .rotate-y-180 { transform: rotateY(180deg); }
     .preserve-3d { transform-style: preserve-3d; }
@@ -36,65 +37,77 @@
     .scrollbar-hide::-webkit-scrollbar { display: none; }
     .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     
-    /* --- 3D 地球與飛機動畫 --- */
-    .earth-container {
-      width: 240px;
-      height: 240px;
-      position: relative;
-      border-radius: 50%;
-      background: url('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Earthmap1000x500compac.jpg/640px-Earthmap1000x500compac.jpg');
-      background-size: 600px 100%;
-      box-shadow: inset 16px 0 40px 6px rgba(0,0,0,0.2), inset -4px -4px 10px rgba(255,255,255,0.4), 0 20px 40px rgba(0,0,0,0.1);
-      animation: rotateEarth 30s linear infinite;
-      z-index: 10;
-    }
-    
-    .orbit-container {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 340px;
-      height: 340px;
-      transform: translate(-50%, -50%);
-      border-radius: 50%;
-      animation: orbitRotate 12s linear infinite;
-      pointer-events: none;
-      z-index: 20;
-    }
-
-    .airplane-icon {
-      position: absolute;
-      top: 0;
-      left: 50%;
-      transform: translate(-50%, -50%) rotate(90deg);
-      font-size: 32px;
-      filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.2));
-    }
+    /* --- 3D 地球與真實飛機動畫 --- */
     
     .earth-wrapper {
       position: relative;
       display: flex;
       justify-content: center;
       align-items: center;
-      animation: floatEarth 6s ease-in-out infinite;
+      height: 320px;
+      perspective: 1000px; /* 3D 透視 */
+      transform-style: preserve-3d;
+    }
+
+    .earth-container {
+      width: 240px;
+      height: 240px;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) translateZ(0); /* 位於中心 */
+      border-radius: 50%;
+      /* 藍色底色防破圖 */
+      background-color: #1a4d80;
+      /* NASA 地球貼圖 */
+      background-image: url('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Solarsystemscope_texture_2k_earth_daymap.jpg/1024px-Solarsystemscope_texture_2k_earth_daymap.jpg');
+      background-size: auto 100%; 
+      background-repeat: repeat-x;
+      box-shadow: inset 16px 0 40px 6px rgba(0,0,0,0.6), inset -4px -4px 10px rgba(255,255,255,0.3), 0 0 20px rgba(0,0,0,0.2);
+      animation: rotateEarth 20s linear infinite;
+      z-index: 10;
+    }
+    
+    /* 飛機軌道軸心 */
+    .airplane-orbit {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+      animation: orbitRotate 8s linear infinite;
+      z-index: 15; /* 預設層級 */
+    }
+
+    /* 真實飛機圖片 */
+    .realistic-airplane {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 60px; /* 飛機大小 */
+      height: auto;
+      /* 1. 初始在中心
+         2. 向外推 180px (軌道半徑)
+         3. 旋轉機頭方向 
+         4. 微微傾斜機身
+      */
+      transform: translate(-50%, -50%) translateX(180px) rotateY(90deg) rotateZ(15deg);
+      filter: drop-shadow(5px 10px 4px rgba(0,0,0,0.3));
     }
 
     @keyframes rotateEarth {
       0% { background-position: 0 0; }
-      100% { background-position: -600px 0; }
+      100% { background-position: -480px 0; } /* 240px * 2 */
     }
 
     @keyframes orbitRotate {
-      0% { transform: translate(-50%, -50%) rotate(0deg); }
-      100% { transform: translate(-50%, -50%) rotate(360deg); }
-    }
-
-    @keyframes floatEarth {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-15px); }
+      /* 繞 Y 軸旋轉，並帶有一點 Z 軸傾斜，製造立體感 */
+      from { transform: translate(-50%, -50%) rotateZ(-15deg) rotateY(0deg); }
+      to { transform: translate(-50%, -50%) rotateZ(-15deg) rotateY(360deg); }
     }
     
-    /* 通用漂浮動畫 (背景掉落物) */
+    /* 通用漂浮動畫 */
     @keyframes float {
       0%, 100% { transform: translateY(0px); }
       50% { transform: translateY(-10px); }
@@ -111,10 +124,10 @@
       Star, MapPin, AlertTriangle, BookOpen, 
       Utensils, ShoppingBag, Bed, Train, Volume2, 
       Maximize2, X, Calculator, Languages, ChevronLeft, Sparkles, Globe, Repeat, Plane,
-      Wine, Home
+      Wine
     } from 'lucide-react';
 
-    // --- 西班牙特色圖案 SVG ---
+    // --- 西班牙特色圖案 SVG (保持不變) ---
     const Flamenco = ({size, color}) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4.5 10C4.5 10 6 8 8 8C10 8 11 10 11 10C11 10 12 8 14 8C16 8 17.5 10 17.5 10"/>
@@ -153,8 +166,7 @@
         bgColor: "#FAF3E0", 
         bgStyle: { 
           backgroundImage: `linear-gradient(45deg, #EAD8C8 25%, transparent 25%, transparent 75%, #EAD8C8 75%, #EAD8C8), linear-gradient(45deg, #EAD8C8 25%, transparent 25%, transparent 75%, #EAD8C8 75%, #EAD8C8)`,
-          backgroundSize: '40px 40px',
-          backgroundPosition: '0 0, 20px 20px'
+          backgroundSize: '40px 40px', backgroundPosition: '0 0, 20px 20px'
         },
         primaryColor: "text-[#2C3E50]", accentColor: "bg-[#AA151B]",
         buttonText: "text-[#F1BF00]", 
@@ -170,7 +182,7 @@
     };
 
     // ==========================================
-    // 2. 資料庫 (Database)
+    // 2. 資料庫 (Database) - (保持十大神句不變)
     // ==========================================
     const DB = {
       jp: {
@@ -375,7 +387,7 @@
     };
 
     // ==========================================
-    // 3. 元件 (Components)
+    // 3. 元件 (Components) (保持不變)
     // ==========================================
     const BigTextModal = ({ text, subText, onClose }) => (
       <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-6 animate-in fade-in duration-200" onClick={onClose}>
@@ -470,7 +482,7 @@
       );
     };
 
-    // 1. 主畫面開場 (Main Splash) - Wishcore
+    // 1. 主畫面開場 (Main Splash) - 更新為 3D 飛機動畫 + 修復地球
     const MainSplash = ({ onStart }) => {
       return (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-[#FFFBF0] text-[#4A4A4A] animate-in fade-in duration-500 overflow-hidden py-16">
@@ -480,10 +492,15 @@
           </div>
           
           <div className="earth-wrapper z-0 my-auto">
-            <div className="earth-container">
-              <div className="orbit-container">
-                <div className="airplane-icon">✈️</div>
-              </div>
+            <div className="earth-container"></div>
+            
+            {/* 新的 3D 飛機軌道和真實飛機 */}
+            <div className="airplane-orbit">
+              <img 
+                src="https://purepng.com/public/uploads/large/purepng.com-airplaneairplanefixed-wing-aircraftaircraftplaneaeroplanepowered-flying-vehicle-1701528154650b3j2p.png" 
+                alt="Airplane" 
+                className="realistic-airplane"
+              />
             </div>
           </div>
 
@@ -500,12 +517,11 @@
       );
     };
 
-    // 2. 語言選擇器
+    // 2. 語言選擇器 (保持不變)
     const LanguageSelector = ({ onSelect, onBack }) => {
       return (
         <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-[#FFFBF0] animate-in zoom-in duration-300">
           
-          {/* 新增的返回首頁按鈕 */}
           <button 
             onClick={onBack}
             className="absolute top-6 left-6 text-gray-400 hover:text-gray-600 flex items-center gap-1 transition-colors"
@@ -537,7 +553,7 @@
       );
     }
 
-    // 3. 語言主程式
+    // 3. 語言主程式 (保持不變)
     const LanguageApp = ({ langKey, onBack }) => {
       const theme = THEMES[langKey];
       const data = DB[langKey];
