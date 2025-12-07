@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>出國攏欸通 - 一款為您打造的啞巴App</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  
+  <!-- 載入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 載入 React -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+  </script>
+
+  <style>
+    body { 
+      -webkit-tap-highlight-color: transparent; 
+      transition: background-color 0.5s; 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .rotate-y-180 { transform: rotateY(180deg); }
+    .preserve-3d { transform-style: preserve-3d; }
+    .backface-hidden { backface-visibility: hidden; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    /* --- 3D 地球與飛機動畫 --- */
+    .earth-container {
+      width: 240px;
+      height: 240px;
+      position: relative;
+      border-radius: 50%;
+      background: url('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Earthmap1000x500compac.jpg/640px-Earthmap1000x500compac.jpg');
+      background-size: 600px 100%;
+      box-shadow: inset 16px 0 40px 6px rgba(0,0,0,0.2), inset -4px -4px 10px rgba(255,255,255,0.4), 0 20px 40px rgba(0,0,0,0.1);
+      animation: rotateEarth 30s linear infinite;
+      z-index: 10;
+    }
+    
+    .orbit-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 340px;
+      height: 340px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      animation: orbitRotate 12s linear infinite;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    .airplane-icon {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(90deg);
+      font-size: 32px;
+      filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.2));
+    }
+    
+    .earth-wrapper {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      animation: floatEarth 6s ease-in-out infinite;
+    }
+
+    @keyframes rotateEarth {
+      0% { background-position: 0 0; }
+      100% { background-position: -600px 0; }
+    }
+
+    @keyframes orbitRotate {
+      0% { transform: translate(-50%, -50%) rotate(0deg); }
+      100% { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+
+    @keyframes floatEarth {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-15px); }
+    }
+    
+    /* 通用漂浮動畫 (背景掉落物) */
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import React, { useState, useEffect } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { 
+      Star, MapPin, AlertTriangle, BookOpen, 
+      Utensils, ShoppingBag, Bed, Train, Volume2, 
+      Maximize2, X, Calculator, Languages, ChevronLeft, Sparkles, Globe, Repeat, Plane,
+      Wine, Home
+    } from 'lucide-react';
+
+    // --- 西班牙特色圖案 SVG ---
+    const Flamenco = ({size, color}) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4.5 10C4.5 10 6 8 8 8C10 8 11 10 11 10C11 10 12 8 14 8C16 8 17.5 10 17.5 10"/>
+        <path d="M11 10V14"/> <path d="M14 14L11 10L8 14"/> <path d="M8 14L5 20H17L14 14"/> <path d="M11 4C11 5.10457 10.1046 6 9 6C7.89543 6 7 5.10457 7 4C7 2.89543 7.89543 2 9 2C10.1046 2 11 2.89543 11 4Z"/>
+        <path d="M18.5 6C19.8807 6 21 4.88071 21 3.5C21 2.11929 19.8807 1 18.5 1C17.1193 1 16 2.11929 16 3.5C16 4.88071 17.1193 6 18.5 6Z"/> <path d="M21 10L18.5 6L16 10"/>
+      </svg>
+    );
+    const Bull = ({size, color}) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M7 16L4 20"/> <path d="M17 16L20 20"/> <path d="M12 18V22"/> <path d="M4 13H20"/>
+        <path d="M12 18C14.2091 18 16 16.2091 16 14C16 11.7909 14.2091 10 12 10C9.79086 10 8 11.7909 8 14C8 16.2091 9.79086 18 12 18Z"/>
+        <path d="M6 9C6 9 6.5 5 12 5C17.5 5 18 9 18 9"/> <path d="M6 9L3 6"/> <path d="M18 9L21 6"/> <path d="M9 12L10 13"/> <path d="M15 12L14 13"/>
+      </svg>
+    );
+
+    // ==========================================
+    // 1. 設定與主題
+    // ==========================================
+    const THEMES = {
+      jp: {
+        name: "日語攏欸通", sub: "在日小幫手", code: "JP", langCode: "ja-JP",
+        bgColor: "#FFF8E7", bgStyle: {},
+        primaryColor: "text-yellow-500", accentColor: "bg-yellow-400",
+        buttonText: "text-white", 
+        tabLabel: "五十音", iconColor: "text-yellow-500", sosColor: "bg-red-500"
+      },
+      kr: {
+        name: "韓語攏欸通", sub: "在韓小幫手", code: "KR", langCode: "ko-KR",
+        bgColor: "#B2F7EF", bgStyle: { backgroundImage: 'linear-gradient(90deg, transparent 50%, rgba(255, 255, 255, 0.6) 50%)', backgroundSize: '40px 100%' },
+        primaryColor: "text-[#5D4037]", accentColor: "bg-[#5D4037]",
+        buttonText: "text-[#B2F7EF]", 
+        dropEmoji: "🍫", tabLabel: "四十音", iconColor: "text-[#5D4037]", sosColor: "bg-red-500"
+      },
+      es: {
+        name: "西語攏欸通", sub: "在西小幫手", code: "ES", langCode: "es-ES",
+        bgColor: "#FAF3E0", 
+        bgStyle: { 
+          backgroundImage: `linear-gradient(45deg, #EAD8C8 25%, transparent 25%, transparent 75%, #EAD8C8 75%, #EAD8C8), linear-gradient(45deg, #EAD8C8 25%, transparent 25%, transparent 75%, #EAD8C8 75%, #EAD8C8)`,
+          backgroundSize: '40px 40px',
+          backgroundPosition: '0 0, 20px 20px'
+        },
+        primaryColor: "text-[#2C3E50]", accentColor: "bg-[#AA151B]",
+        buttonText: "text-[#F1BF00]", 
+        tabLabel: "字母", iconColor: "text-[#AA151B]", sosColor: "bg-red-600"
+      },
+      fr: {
+        name: "法語攏欸通", sub: "在法小幫手", code: "FR", langCode: "fr-FR",
+        bgColor: "#F5F5F5", bgStyle: { backgroundImage: 'linear-gradient(0deg, transparent 50%, rgba(0, 35, 149, 0.08) 50%)', backgroundSize: '100% 30px' },
+        primaryColor: "text-[#002395]", accentColor: "bg-[#002395]",
+        buttonText: "text-white", 
+        tabLabel: "字母", iconColor: "text-[#ED2939]", sosColor: "bg-red-600"
+      }
+    };
+
+    // ==========================================
+    // 2. 資料庫 (Database)
+    // ==========================================
+    const DB = {
+      jp: {
+        alphabet: [
+          { row: 'a', items: [{h:'あ',k:'ア',r:'a'},{h:'い',k:'イ',r:'i'},{h:'う',k:'ウ',r:'u'},{h:'え',k:'エ',r:'e'},{h:'お',k:'オ',r:'o'}] },
+          { row: 'k', items: [{h:'か',k:'カ',r:'ka'},{h:'き',k:'キ',r:'ki'},{h:'く',k:'ク',r:'ku'},{h:'け',k:'ケ',r:'ke'},{h:'こ',k:'コ',r:'ko'}] },
+          { row: 's', items: [{h:'さ',k:'サ',r:'sa'},{h:'し',k:'シ',r:'shi'},{h:'す',k:'ス',r:'su'},{h:'せ',k:'セ',r:'se'},{h:'そ',k:'ソ',r:'so'}] },
+          { row: 't', items: [{h:'た',k:'タ',r:'ta'},{h:'ち',k:'チ',r:'chi'},{h:'つ',k:'ツ',r:'tsu'},{h:'て',k:'テ',r:'te'},{h:'と',k:'ト',r:'to'}] },
+          { row: 'n', items: [{h:'な',k:'ナ',r:'na'},{h:'に',k:'ニ',r:'ni'},{h:'ぬ',k:'ヌ',r:'nu'},{h:'ね',k:'ネ',r:'ne'},{h:'の',k:'ノ',r:'no'}] },
+          { row: 'h', items: [{h:'は',k:'ハ',r:'ha'},{h:'ひ',k:'ヒ',r:'hi'},{h:'ふ',k:'フ',r:'fu'},{h:'へ',k:'ヘ',r:'he'},{h:'ほ',k:'ホ',r:'ho'}] },
+          { row: 'm', items: [{h:'ま',k:'マ',r:'ma'},{h:'み',k:'ミ',r:'mi'},{h:'む',k:'ム',r:'mu'},{h:'め',k:'メ',r:'me'},{h:'も',k:'モ',r:'mo'}] },
+          { row: 'y', items: [{h:'や',k:'ヤ',r:'ya'},{h:' ',k:' ',r:''},{h:'ゆ',k:'ユ',r:'yu'},{h:' ',k:' ',r:''},{h:'よ',k:'ヨ',r:'yo'}] },
+          { row: 'r', items: [{h:'ら',k:'ラ',r:'ra'},{h:'り',k:'リ',r:'ri'},{h:'る',k:'ル',r:'ru'},{h:'れ',k:'レ',r:'re'},{h:'ろ',k:'ロ',r:'ro'}] },
+          { row: 'w', items: [{h:'わ',k:'ワ',r:'wa'},{h:' ',k:' ',r:''},{h:' ',k:' ',r:''},{h:' ',k:' ',r:''},{h:'を',k:'ヲ',r:'wo'}] },
+          { row: 'n', items: [{h:'ん',k:'ン',r:'n'},{h:' ',k:' ',r:''},{h:' ',k:' ',r:''},{h:' ',k:' ',r:''},{h:' ',k:' ',r:''}] },
+        ],
+        foundation: [
+          { ch: "你好", en: "Hello", jp: "こんにちは", ro: "Konnichiwa", tip: "空你七哇" },
+          { ch: "謝謝", en: "Thank you", jp: "ありがとう", ro: "Arigatou", tip: "阿里嘎多" },
+          { ch: "請/拜託了", en: "Please", jp: "お願いします", ro: "Onegaishimasu", tip: "歐內該吸麻糬" },
+          { ch: "抱歉", en: "Sorry", jp: "ごめんなさい", ro: "Gomennasai", tip: "狗妹那賽" },
+          { ch: "是 (好)", en: "Yes", jp: "はい", ro: "Hai", tip: "嗨！" },
+          { ch: "不是", en: "No", jp: "いいえ", ro: "Iie", tip: "一耶" },
+          { ch: "我是台灣人", en: "I am Taiwanese", jp: "台湾人です", audioJp: "たいわんじんです", ro: "Taiwanjin desu", tip: "台灣金 + 爹蘇" },
+          { ch: "借過", en: "Excuse me", jp: "すみません", ro: "Sumimasen", tip: "蘇咪媽Sen" },
+          { ch: "這個", en: "This one", jp: "これ", ro: "Kore", tip: "口蕾" },
+          { ch: "再見", en: "Goodbye", jp: "さようなら", ro: "Sayounara", tip: "撒優娜拉" },
+        ],
+        numbers: [
+          { ch: "1", en: "One", jp: "いち", ro: "Ichi" }, { ch: "2", en: "Two", jp: "に", ro: "Ni" }, { ch: "3", en: "Three", jp: "さん", ro: "San" },
+          { ch: "10", en: "Ten", jp: "じゅう", ro: "Juu" }, { ch: "100", en: "100", jp: "ひゃく", ro: "Hyaku" }, { ch: "1000", en: "1000", jp: "せん", ro: "Sen" },
+          { ch: "10000", en: "10000", jp: "いちまん", ro: "Ichiman" }
+        ],
+        transport: [
+          { ch: "IC卡刷不過", en: "IC Card Error", jp: "ICカードが使えません", ro: "IC ka-do ga tsukaemasen" },
+          { ch: "這班車去...嗎？", en: "Does it go to...?", jp: "この電車は...に行きますか", ro: "Kono densha wa ... ni ikimasu ka" }
+        ],
+        dining: [
+          { ch: "有中文菜單嗎？", en: "Chinese menu?", jp: "中国語のメニューはありますか", ro: "Chuugokugo no menyuu wa arimasu ka" },
+          { ch: "我要這個", en: "I'll have this", jp: "これをください", ro: "Kore o kudasai" }
+        ],
+        shopping: [
+          { ch: "可以免稅嗎？", en: "Tax-free?", jp: "免税できますか", ro: "Menzei dekimasu ka" },
+          { ch: "多少錢？", en: "How much?", jp: "いくらですか", ro: "Ikura desu ka" }
+        ],
+        hotel: [
+          { ch: "我要辦理入住", en: "Check-in please", jp: "チェックインをお願いします", ro: "Chekkuin o onegaishimasu" },
+          { ch: "可以寄放行李嗎？", en: "Luggage?", jp: "荷物を預かってもらえますか", ro: "Nimotsu o azukatte moraemasu ka" }
+        ],
+        sos: [
+          { text: "救命！", jp: "助けて！", ro: "Tasukete!" },
+          { text: "我不舒服", jp: "具合が悪いです", ro: "Guai ga warui desu" },
+          { text: "護照不見了", jp: "パスポートをなくしました", ro: "Pasupooto o nakushimashita" }
+        ]
+      },
+      kr: {
+        alphabet: [
+          { row: 'c1', title:'基本子音', items: [{k:'ㄱ',r:'g/k'},{k:'ㄴ',r:'n'},{k:'ㄷ',r:'d/t'},{k:'ㄹ',r:'r/l'},{k:'ㅁ',r:'m'}] },
+          { row: 'c2', title:'', items: [{k:'ㅂ',r:'b/p'},{k:'ㅅ',r:'s'},{k:'ㅇ',r:'ng'},{k:'ㅈ',r:'j'},{k:'ㅊ',r:'ch'}] },
+          { row: 'c3', title:'', items: [{k:'ㅋ',r:'k'},{k:'ㅌ',r:'t'},{k:'ㅍ',r:'p'},{k:'ㅎ',r:'h'},{k:' ',r:''}] },
+          { row: 'cc', title:'雙子音', items: [{k:'ㄲ',r:'kk'},{k:'ㄸ',r:'tt'},{k:'ㅃ',r:'pp'},{k:'ㅆ',r:'ss'},{k:'ㅉ',r:'jj'}] },
+          { row: 'v1', title:'基本母音', items: [{k:'ㅏ',r:'a'},{k:'ㅑ',r:'ya'},{k:'ㅓ',r:'eo'},{k:'ㅕ',r:'yeo'},{k:'ㅗ',r:'o'}] },
+          { row: 'v2', title:'', items: [{k:'ㅛ',r:'yo'},{k:'ㅜ',r:'u'},{k:'ㅠ',r:'yu'},{k:'ㅡ',r:'eu'},{k:'ㅣ',r:'i'}] },
+          { row: 'v3', title:'複合母音', items: [{k:'ㅐ',r:'ae'},{k:'ㅒ',r:'yae'},{k:'ㅔ',r:'e'},{k:'ㅖ',r:'ye'},{k:'ㅘ',r:'wa'}] },
+          { row: 'v4', title:'', items: [{k:'ㅙ',r:'wae'},{k:'ㅚ',r:'oe'},{k:'ㅝ',r:'wo'},{k:'ㅞ',r:'we'},{k:'ㅟ',r:'wi'}] },
+          { row: 'v5', title:'', items: [{k:'ㅢ',r:'ui'},{k:'',r:''},{k:'',r:''},{k:'',r:''},{k:'',r:''}] },
+        ],
+        foundation: [
+          { ch: "你好", en: "Hello", jp: "안녕하세요", ro: "Annyeonghaseyo", tip: "安妞哈誰唷" },
+          { ch: "謝謝", en: "Thank you", jp: "감사합니다", ro: "Kamsahamnida", tip: "康撒哈咪搭" },
+          { ch: "請/拜託了", en: "Please", jp: "부탁합니다", ro: "Butakamnida", tip: "普塔卡咪搭" },
+          { ch: "抱歉", en: "Sorry", jp: "죄송합니다", ro: "Joesonghamnida", tip: "崔送哈咪搭" },
+          { ch: "是 (好)", en: "Yes", jp: "네", ro: "Ne", tip: "內" },
+          { ch: "不是", en: "No", jp: "아니요", ro: "Aniyo", tip: "阿尼唷" },
+          { ch: "我是台灣人", en: "I am Taiwanese", jp: "저는 대만 사람입니다", ro: "Jeoneun Daeman saram imnida", tip: "秋嫩 台灣 沙朗 易咪搭" },
+          { ch: "借過", en: "Excuse me", jp: "잠시만요", ro: "Jamsimanyo", tip: "暫洗慢唷" },
+          { ch: "這個", en: "This one", jp: "이거", ro: "Igeo", tip: "以勾" },
+          { ch: "再見", en: "Goodbye", jp: "안녕히 계세요", ro: "Annyeonghi gyeseyo", tip: "安妞hee K-Say-Yo (對留下的人說)" },
+        ],
+        numbers: [
+          { ch: "1", en: "One", jp: "일", ro: "Il" }, { ch: "2", en: "Two", jp: "이", ro: "I" }, { ch: "3", en: "Three", jp: "삼", ro: "Sam" },
+          { ch: "10", en: "Ten", jp: "십", ro: "Sip" }, { ch: "100", en: "100", jp: "백", ro: "Baek" }, { ch: "1000", en: "1000", jp: "천", ro: "Cheon" },
+          { ch: "10000", en: "10000", jp: "만", ro: "Man" }
+        ],
+        transport: [
+          { ch: "交通卡刷不過", en: "Card Error", jp: "카드가 안 돼요", ro: "Kadeuga an dwaeyo" },
+          { ch: "我要去這裡", en: "Go here", jp: "여기로 가고 싶어요", ro: "Yeogiro gago sipeoyo" }
+        ],
+        dining: [
+          { ch: "有中文菜單嗎？", en: "Chinese menu?", jp: "중국어 메뉴 있어요?", ro: "Junggugeo menyu isseoyo?" },
+          { ch: "推薦什麼？", en: "Recommend?", jp: "추천해 주세요", ro: "Chucheonhae juseyo" }
+        ],
+        shopping: [
+          { ch: "可以免稅嗎？", en: "Tax-free?", jp: "면세 돼요?", ro: "Myeonse dwaeyo?" },
+          { ch: "多少錢？", en: "How much?", jp: "얼마예요?", ro: "Eolmayeyo?" }
+        ],
+        hotel: [
+          { ch: "我要辦理入住", en: "Check-in", jp: "체크인 부탁합니다", ro: "Chekeuin butakamnida" },
+          { ch: "Wi-Fi 密碼", en: "Wi-Fi", jp: "와이파이 비밀번호 뭐예요?", ro: "Waipai bimilbeonho mwoyeyo?" }
+        ],
+        sos: [
+          { text: "救命！", jp: "도와주세요!", ro: "Dowajuseyo!" },
+          { text: "我不舒服", jp: "몸이 안 좋아요", ro: "Momi an joayo" },
+          { text: "護照不見了", jp: "여권을 잃어버렸어요", ro: "Yeogwoneul ireobeoryeosseoyo" }
+        ]
+      },
+      es: {
+        alphabet: [
+          { row: '1', items: [{k:'A',r:'阿',a:'a'},{k:'B',r:'貝',a:'be'},{k:'C',r:'塞',a:'ce'},{k:'D',r:'得',a:'de'},{k:'E',r:'欸',a:'e'}] },
+          { row: '2', items: [{k:'F',r:'欸F',a:'efe'},{k:'G',r:'黑',a:'ge'},{k:'H',r:'阿切',a:'hache'},{k:'I',r:'伊',a:'i'},{k:'J',r:'吼塔',a:'jota'}] },
+          { row: '3', items: [{k:'K',r:'卡',a:'ka'},{k:'L',r:'欸勒',a:'ele'},{k:'M',r:'欸M',a:'eme'},{k:'N',r:'欸N',a:'ene'},{k:'Ñ',r:'欸捏',a:'eñe'}] },
+          { row: '4', items: [{k:'O',r:'喔',a:'o'},{k:'P',r:'佩',a:'pe'},{k:'Q',r:'姑',a:'cu'},{k:'R',r:'艾雷',a:'erre'},{k:'S',r:'欸S',a:'ese'}] },
+          { row: '5', items: [{k:'T',r:'得',a:'te'},{k:'U',r:'嗚',a:'u'},{k:'V',r:'烏V',a:'uve'},{k:'W',r:'達不溜',a:'uve doble'},{k:'X',r:'欸kis',a:'equis'}] },
+          { row: '6', items: [{k:'Y',r:'耶',a:'ye'},{k:'Z',r:'C塔',a:'zeta'},{k:'CH',r:'切',a:'che'},{k:'LL',r:'欸耶',a:'elle'},{k:'RR',r:'大彈舌',a:'erre'}] }
+        ],
+        foundation: [
+          { ch: "你好", en: "Hello", jp: "Hola", ro: "Hola", tip: "歐拉" },
+          { ch: "謝謝", en: "Thank you", jp: "Gracias", ro: "Gracias", tip: "葛拉喜亞斯" },
+          { ch: "請/拜託了", en: "Please", jp: "Por favor", ro: "Por favor", tip: "波 發沃" },
+          { ch: "抱歉", en: "Sorry", jp: "Lo siento", ro: "Lo siento", tip: "囉 仙偷" },
+          { ch: "是 (好)", en: "Yes", jp: "Sí", ro: "Sí", tip: "吸" },
+          { ch: "不是", en: "No", jp: "No", ro: "No", tip: "No" },
+          { ch: "我是台灣人", en: "I am Taiwanese", jp: "Soy de Taiwán", ro: "Soy de Taiwán", tip: "搜以得 台灣" },
+          { ch: "借過", en: "Excuse me", jp: "Con permiso", ro: "Con permiso", tip: "空 佩米搜" },
+          { ch: "這個", en: "This one", jp: "Esto", ro: "Esto", tip: "欸死偷" },
+          { ch: "再見", en: "Goodbye", jp: "Adiós", ro: "Adiós", tip: "阿底喔斯" },
+        ],
+        numbers: [
+          { ch: "1", en: "One", jp: "Uno", ro: "Uno" }, { ch: "2", en: "Two", jp: "Dos", ro: "Dos" }, { ch: "3", en: "Three", jp: "Tres", ro: "Tres" },
+          { ch: "10", en: "Ten", jp: "Diez", ro: "Diez" }, { ch: "100", en: "100", jp: "Cien", ro: "Cien" }, { ch: "1000", en: "1000", jp: "Mil", ro: "Mil" }
+        ],
+        transport: [
+          { ch: "票無效/刷不過", en: "Ticket Error", jp: "El billete no funciona", ro: "El billete no funciona" },
+          { ch: "我要去這裡", en: "Go here", jp: "Quiero ir aquí", ro: "Quiero ir aquí" }
+        ],
+        dining: [
+          { ch: "有英文菜單嗎？", en: "English menu?", jp: "¿Tiene un menú en inglés?", ro: "¿Tiene un menú en inglés?" },
+          { ch: "結帳", en: "Bill", jp: "La cuenta, por favor", ro: "La cuenta, por favor" }
+        ],
+        shopping: [
+          { ch: "可以免稅嗎？", en: "Tax-free?", jp: "¿Es Tax-free?", ro: "¿Es Tax-free?" },
+          { ch: "多少錢？", en: "How much?", jp: "¿Cuánto cuesta?", ro: "¿Cuánto cuesta?" }
+        ],
+        hotel: [
+          { ch: "我要辦理入住", en: "Check-in", jp: "El check-in, por favor", ro: "El check-in, por favor" },
+          { ch: "可以寄放行李嗎？", en: "Luggage?", jp: "¿Puedo dejar mis maletas?", ro: "¿Puedo dejar mis maletas?" }
+        ],
+        sos: [
+          { text: "救命！", jp: "¡Socorro!", ro: "Socorro" },
+          { text: "我不舒服", jp: "No me siento bien", ro: "No me siento bien" },
+          { text: "護照不見了", jp: "He perdido mi pasaporte", ro: "He perdido mi pasaporte" }
+        ]
+      },
+      fr: {
+        alphabet: [
+          { row: '1', items: [{k:'A',r:'阿',a:'a'},{k:'B',r:'貝',a:'bé'},{k:'C',r:'塞',a:'cé'},{k:'D',r:'得',a:'dé'},{k:'E',r:'厄',a:'e'}] },
+          { row: '2', items: [{k:'F',r:'欸F',a:'effe'},{k:'G',r:'J(日)',a:'gé'},{k:'H',r:'阿須',a:'hache'},{k:'I',r:'伊',a:'i'},{k:'J',r:'Ji(吉)',a:'ji'}] },
+          { row: '3', items: [{k:'K',r:'卡',a:'ka'},{k:'L',r:'欸勒',a:'elle'},{k:'M',r:'欸M',a:'emme'},{k:'N',r:'欸N',a:'enne'},{k:'O',r:'歐',a:'o'}] },
+          { row: '4', items: [{k:'P',r:'佩',a:'pé'},{k:'Q',r:'哭',a:'ku'},{k:'R',r:'小舌',a:'erre'},{k:'S',r:'欸S',a:'esse'},{k:'T',r:'得',a:'té'}] },
+          { row: '5', items: [{k:'U',r:'淤',a:'u'},{k:'V',r:'威',a:'vé'},{k:'W',r:'都V',a:'double vé'},{k:'X',r:'克斯',a:'iks'},{k:'Y',r:'伊葛',a:'i grec'}] },
+          { row: '6', items: [{k:'Z',r:'賽德',a:'zède'},{k:'Ç',r:'S音',a:'cédille'},{k:'É',r:'欸(閉)',a:'é'},{k:'È',r:'欸(開)',a:'è'},{k:'Œ',r:'厄',a:'e dans l\'o'}] },
+          { row: '7', items: [{k:'AN',r:'昂',a:'an'},{k:'ON',r:'翁',a:'on'},{k:'IN',r:'安',a:'in'},{k:'OI',r:'哇',a:'oi'},{k:'OU',r:'嗚',a:'ou'}] }
+        ],
+        foundation: [
+          { ch: "你好", en: "Hello", jp: "Bonjour", ro: "Bonjour", tip: "崩朱" },
+          { ch: "謝謝", en: "Thank you", jp: "Merci", ro: "Merci", tip: "梅西" },
+          { ch: "請/拜託了", en: "Please", jp: "S'il vous plaît", ro: "S'il vous plaît", tip: "希-武-普雷" },
+          { ch: "抱歉", en: "Sorry", jp: "Désolé", ro: "Désolé", tip: "爹搜雷" },
+          { ch: "是 (好)", en: "Yes", jp: "Oui", ro: "Oui", tip: "We" },
+          { ch: "不是", en: "No", jp: "Non", ro: "Non", tip: "弄" },
+          { ch: "我是台灣人", en: "I am Taiwanese", jp: "Je suis Taïwanais", audioJp: "Je suis Taïwanais", ro: "Je suis Taïwanais", tip: "惹-穗-台灣內" },
+          { ch: "借過", en: "Excuse me", jp: "Pardon", ro: "Pardon", tip: "帕東" },
+          { ch: "這個", en: "This one", jp: "Ça", ro: "Ça", tip: "薩" },
+          { ch: "再見", en: "Goodbye", jp: "Au revoir", ro: "Au revoir", tip: "歐-霍-瓦" },
+        ],
+        numbers: [
+          { ch: "1", en: "One", jp: "Un", ro: "Un" }, { ch: "2", en: "Two", jp: "Deux", ro: "Deux" }, { ch: "3", en: "Three", jp: "Trois", ro: "Trois" },
+          { ch: "10", en: "Ten", jp: "Dix", ro: "Dix" }, { ch: "100", en: "100", jp: "Cent", ro: "Cent" }, { ch: "1000", en: "1000", jp: "Mille", ro: "Mille" }
+        ],
+        transport: [
+          { ch: "票無效/刷不過", en: "Ticket Error", jp: "Le billet ne passe pas", ro: "Le billet ne passe pas" },
+          { ch: "我要去這裡", en: "Go here", jp: "Je veux aller ici", ro: "Je veux aller ici" }
+        ],
+        dining: [
+          { ch: "有英文菜單嗎？", en: "English menu?", jp: "Avez-vous un menu en anglais?", ro: "Avez-vous un menu en anglais?" },
+          { ch: "結帳", en: "Bill", jp: "L'addition, s'il vous plaît", ro: "L'addition, s'il vous plaît" }
+        ],
+        shopping: [
+          { ch: "可以免稅嗎？", en: "Tax-free?", jp: "C'est détaxé?", ro: "C'est détaxé?" },
+          { ch: "多少錢？", en: "How much?", jp: "C'est combien?", ro: "C'est combien?" }
+        ],
+        hotel: [
+          { ch: "我要辦理入住", en: "Check-in", jp: "Le check-in, s'il vous plaît", ro: "Le check-in, s'il vous plaît" },
+          { ch: "可以寄放行李嗎？", en: "Luggage?", jp: "Puis-je laisser mes bagages?", ro: "Puis-je laisser mes bagages?" }
+        ],
+        sos: [
+          { text: "救命！", jp: "Au secours!", ro: "Au secours!" },
+          { text: "我不舒服", jp: "Je ne me sens pas bien", ro: "Je ne me sens pas bien" },
+          { text: "護照不見了", jp: "J'ai perdu mon passeport", ro: "J'ai perdu mon passeport" }
+        ]
+      }
+    };
+
+    // ==========================================
+    // 3. 元件 (Components)
+    // ==========================================
+    const BigTextModal = ({ text, subText, onClose }) => (
+      <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-6 animate-in fade-in duration-200" onClick={onClose}>
+        <button onClick={onClose} className="absolute top-6 right-6 text-white/50 hover:text-white"><X size={32} /></button>
+        <div className="text-center space-y-8">
+          <p className="text-white/60 text-xl font-medium">請給店員看這行字：</p>
+          <h2 className="text-5xl md:text-7xl font-bold text-white leading-tight break-words">{text}</h2>
+          <p className="text-yellow-400 text-2xl font-light mt-4">{subText}</p>
+        </div>
+        <div className="absolute bottom-10 text-white/30 text-sm">點擊任意處關閉</div>
+      </div>
+    );
+
+    const NumberCard = ({ ch, en, jp, ro, tip, theme }) => {
+      const [showBig, setShowBig] = useState(false);
+      const playAudio = (e) => {
+        e.stopPropagation();
+        const utterance = new SpeechSynthesisUtterance(jp);
+        utterance.lang = theme.langCode; utterance.rate = 0.9;
+        window.speechSynthesis.speak(utterance);
+      };
+      return (
+        <>
+          <div className="bg-white/90 backdrop-blur-md rounded-2xl shadow-sm border-2 border-white p-4 flex flex-col items-center justify-center relative hover:shadow-md transition-shadow">
+            <div className="text-center mb-2"><h3 className="text-4xl font-bold text-gray-800">{ch}</h3><p className={`text-sm ${theme.primaryColor} font-medium tracking-wide`}>{en}</p></div>
+            <div className={`bg-white/50 rounded-lg px-6 py-2 mb-3 text-center w-full border border-gray-100`}>
+              <p className="text-xl font-bold text-gray-900">{jp}</p>
+              <p className="text-xs text-gray-500 font-mono">{ro}</p>
+              {tip && <p className="text-[10px] text-gray-400 mt-1">💡 {tip}</p>}
+            </div>
+            <div className="flex gap-6 z-10">
+              <button onClick={playAudio} className="p-3 rounded-full bg-gray-100 text-blue-600 hover:bg-blue-100 transition-colors shadow-sm"><Volume2 size={20} /></button>
+              <button onClick={() => setShowBig(true)} className="p-3 rounded-full bg-gray-100 text-green-600 hover:bg-green-100 transition-colors shadow-sm"><Maximize2 size={20} /></button>
+            </div>
+          </div>
+          {showBig && <BigTextModal text={jp} subText={ro} onClose={() => setShowBig(false)} />}
+        </>
+      );
+    };
+
+    const WordCard = ({ ch, en, jp, ro, tip, audioJp, theme }) => {
+      const [flipped, setFlipped] = useState(false);
+      const [showBig, setShowBig] = useState(false);
+      const playAudio = (e) => {
+        e.stopPropagation();
+        const textToSpeak = audioJp || jp;
+        const utterance = new SpeechSynthesisUtterance(textToSpeak);
+        utterance.lang = theme.langCode; utterance.rate = 0.9;
+        window.speechSynthesis.speak(utterance);
+      };
+      return (
+        <>
+          <div className={`relative h-40 w-full perspective-1000 cursor-pointer group`} onClick={() => setFlipped(!flipped)}>
+            <div className={`relative w-full h-full duration-500 preserve-3d transition-transform ${flipped ? 'rotate-y-180' : ''}`}>
+              <div className="absolute inset-0 backface-hidden bg-white/90 backdrop-blur-md rounded-2xl shadow-sm border-2 border-white flex flex-col items-center justify-center p-4 hover:shadow-md transition-shadow">
+                <h3 className="text-2xl font-bold text-gray-800 text-center">{ch}</h3>
+                <p className={`text-sm ${theme.primaryColor} mt-2 font-medium tracking-wide`}>{en}</p>
+              </div>
+              <div className={`absolute inset-0 backface-hidden rotate-y-180 bg-white/95 backdrop-blur-xl rounded-2xl shadow-lg border-2 border-gray-200 flex flex-col items-center justify-center p-4`}>
+                <div className="text-center w-full">
+                  <p className="text-xl font-bold text-gray-900 mb-1 truncate">{jp}</p>
+                  <p className={`text-sm ${theme.primaryColor} font-medium`}>{ro}</p>
+                  {tip && <p className="text-xs text-gray-400 mt-1">💡 {tip}</p>}
+                </div>
+                <div className="flex gap-4 mt-4 relative z-10">
+                  <button onClick={playAudio} className="p-2 rounded-full bg-gray-100 text-blue-600 hover:bg-blue-100 transition-colors"><Volume2 size={18} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); setShowBig(true); }} className="p-2 rounded-full bg-gray-100 text-green-600 hover:bg-green-100 transition-colors"><Maximize2 size={18} /></button>
+                </div>
+              </div>
+            </div>
+          </div>
+          {showBig && <BigTextModal text={jp} subText={ro} onClose={() => setShowBig(false)} />}
+        </>
+      );
+    };
+
+    const CharCell = ({ char, romaji, audio, theme, isKatakana }) => {
+      if(!char || char === ' ') return <div className="aspect-square"></div>;
+      
+      const playKana = () => {
+        const textToSpeak = audio || char;
+        const u = new SpeechSynthesisUtterance(textToSpeak);
+        u.lang = theme.langCode;
+        window.speechSynthesis.speak(u);
+      };
+      
+      return (
+        <button onClick={playKana} className="aspect-square bg-white/60 hover:bg-white/90 active:scale-95 transition-all rounded-lg flex flex-col items-center justify-center border border-white/50 shadow-sm">
+          <span className={`text-xl font-bold ${theme.primaryColor}`}>{char}</span>
+          <span className="text-[10px] text-gray-500 font-mono mt-1">{romaji}</span>
+        </button>
+      );
+    };
+
+    // 1. 主畫面開場 (Main Splash) - Wishcore
+    const MainSplash = ({ onStart }) => {
+      return (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-[#FFFBF0] text-[#4A4A4A] animate-in fade-in duration-500 overflow-hidden py-16">
+          <div className="z-10 text-center space-y-4 animate-in slide-in-from-top duration-700 mt-8">
+            <h1 className="text-5xl font-black tracking-wider text-[#6A6A6A] drop-shadow-sm">出國攏欸通</h1>
+            <p className="text-xl text-[#9CA3AF] font-medium tracking-wide">一款為您打造的啞巴 App</p>
+          </div>
+          
+          <div className="earth-wrapper z-0 my-auto">
+            <div className="earth-container">
+              <div className="orbit-container">
+                <div className="airplane-icon">✈️</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="z-10 w-full px-8 pb-12 animate-in slide-in-from-bottom duration-700">
+            <button 
+              onClick={onStart} 
+              className="w-full bg-[#88D8C0] hover:bg-[#76C7AF] text-white text-xl font-bold py-4 rounded-3xl shadow-lg transition-all transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2 border-2 border-white/50"
+            >
+              開啟 App
+            </button>
+            <div className="text-center mt-6 text-[#C4C4C4] text-xs tracking-widest font-medium">TRAVEL SPEAK v1.0</div>
+          </div>
+        </div>
+      );
+    };
+
+    // 2. 語言選擇器
+    const LanguageSelector = ({ onSelect, onBack }) => {
+      return (
+        <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-[#FFFBF0] animate-in zoom-in duration-300">
+          
+          {/* 新增的返回首頁按鈕 */}
+          <button 
+            onClick={onBack}
+            className="absolute top-6 left-6 text-gray-400 hover:text-gray-600 flex items-center gap-1 transition-colors"
+          >
+            <ChevronLeft size={24} />
+            <span className="text-lg font-medium">返回首頁</span>
+          </button>
+
+          <h2 className="text-2xl font-bold text-gray-600 mb-8 tracking-wide">請選擇你的語言</h2>
+          <div className="grid grid-cols-2 gap-6 w-full max-w-sm px-6">
+            <button onClick={() => onSelect('jp')} className="bg-[#FFF8E7] hover:bg-yellow-50 border-2 border-yellow-200 p-6 rounded-3xl flex flex-col items-center shadow-sm hover:shadow-md transition-all group">
+              <span className="text-4xl mb-2 group-hover:scale-110 transition-transform">🇯🇵</span>
+              <span className="font-bold text-gray-600">日文</span>
+            </button>
+            <button onClick={() => onSelect('kr')} className="bg-teal-50 hover:bg-teal-100 border-2 border-teal-200 p-6 rounded-3xl flex flex-col items-center shadow-sm hover:shadow-md transition-all group">
+              <span className="text-4xl mb-2 group-hover:scale-110 transition-transform">🇰🇷</span>
+              <span className="font-bold text-gray-600">韓文</span>
+            </button>
+            <button onClick={() => onSelect('es')} className="bg-[#FAF3E0] hover:bg-orange-50 border-2 border-orange-200 p-6 rounded-3xl flex flex-col items-center shadow-sm hover:shadow-md transition-all group">
+              <span className="text-4xl mb-2 group-hover:scale-110 transition-transform">🇪🇸</span>
+              <span className="font-bold text-gray-600">西文</span>
+            </button>
+            <button onClick={() => onSelect('fr')} className="bg-[#F5F5F5] hover:bg-blue-50 border-2 border-blue-200 p-6 rounded-3xl flex flex-col items-center shadow-sm hover:shadow-md transition-all group">
+              <span className="text-4xl mb-2 group-hover:scale-110 transition-transform">🇫🇷</span>
+              <span className="font-bold text-gray-600">法文</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // 3. 語言主程式
+    const LanguageApp = ({ langKey, onBack }) => {
+      const theme = THEMES[langKey];
+      const data = DB[langKey];
+      const [activeTab, setActiveTab] = useState('foundation');
+      const [bgItems, setBgItems] = useState([]);
+      const [selectedScenario, setSelectedScenario] = useState(null);
+      const [isKatakana, setIsKatakana] = useState(false); 
+
+      useEffect(() => {
+        const jpColors = ["text-pink-300", "text-blue-300", "text-yellow-300", "text-purple-300", "text-green-300", "text-red-300"];
+        
+        const items = Array.from({ length: 25 }).map((_, i) => ({
+          id: i,
+          top: Math.random() * 100,
+          left: Math.random() * 100,
+          size: Math.random() * 15 + 10,
+          delay: Math.random() * 5,
+          color: langKey === 'jp' ? jpColors[Math.floor(Math.random() * jpColors.length)] : '',
+          
+          // 日文 (JP): 0=星星(SVG), 1=國旗, 2=櫻花
+          jpType: langKey === 'jp' ? Math.floor(Math.random() * 3) : 0,
+          
+          // 韓文 (KR): 0=巧克力, 1=國旗
+          krType: langKey === 'kr' ? Math.floor(Math.random() * 2) : 0,
+
+          // 西文 (ES): 0=燉飯, 1=國旗
+          esType: langKey === 'es' ? Math.floor(Math.random() * 2) : 0, 
+
+          // 法文 (FR): 0=長棍, 1=可頌, 2=國旗
+          frType: langKey === 'fr' ? Math.floor(Math.random() * 3) : 0 
+        }));
+        setBgItems(items);
+      }, [langKey]);
+
+      const renderContent = () => {
+        switch (activeTab) {
+          case 'foundation':
+            return (
+              <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                <div>
+                  <h2 className={`text-lg font-bold ${theme.primaryColor} mb-3 flex items-center gap-2`}>
+                    <Star className="fill-current" size={20} />
+                    萬用神句 (Magic Words)
+                  </h2>
+                  <div className="grid grid-cols-2 gap-3">
+                    {data.foundation.map((item, idx) => (
+                      <WordCard key={idx} {...item} theme={theme} />
+                    ))}
+                  </div>
+                  <p className="text-center text-gray-400 text-sm mt-8">數字特訓請前往「情境」分頁 🚃</p>
+                </div>
+              </div>
+            );
+          case 'scenario':
+            if (selectedScenario) {
+              const categoryData = data[selectedScenario];
+              const isNumberMode = selectedScenario === 'numbers';
+              return (
+                <div className="animate-in slide-in-from-right duration-300 h-full flex flex-col">
+                  <button onClick={() => setSelectedScenario(null)} className={`mb-4 flex items-center text-gray-500 hover:${theme.primaryColor} transition-colors self-start`}>
+                    <ChevronLeft size={20} /><span className="font-medium">返回分類</span>
+                  </button>
+                  <h2 className={`text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2`}>
+                    {selectedScenario === 'numbers' ? <Calculator /> : <MapPin />}
+                    {selectedScenario === 'numbers' ? '數字特訓' : '情境對話'}
+                  </h2>
+                  {isNumberMode && <div className="mb-4 p-3 bg-gray-100 text-gray-600 text-sm rounded-lg">💡 數字卡直接顯示發音與功能，無須翻面。</div>}
+                  <div className="space-y-3 pb-20 overflow-y-auto">
+                    {categoryData.map((item, idx) => (
+                      isNumberMode 
+                        ? <NumberCard key={idx} {...item} theme={theme} />
+                        : <WordCard key={idx} {...item} theme={theme} />
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            const SCENARIO_CATEGORIES = [
+              { id: 'numbers', name: '數字特訓', icon: <Calculator size={24} /> },
+              { id: 'transport', name: '交通移動', icon: <Train size={24} /> },
+              { id: 'dining', name: '美食餐廳', icon: <Utensils size={24} /> },
+              { id: 'shopping', name: '購物血拼', icon: <ShoppingBag size={24} /> },
+              { id: 'hotel', name: '住宿飯店', icon: <Bed size={24} /> },
+            ];
+            return (
+              <div className="grid grid-cols-2 gap-4 animate-in fade-in duration-300">
+                {SCENARIO_CATEGORIES.map(cat => (
+                  <button key={cat.id} onClick={() => setSelectedScenario(cat.id)} className={`flex flex-col items-center justify-center p-6 bg-white/80 backdrop-blur-md rounded-2xl shadow-sm hover:shadow-md transition-all border-2 border-transparent hover:border-gray-300 aspect-square ${theme.primaryColor}`}>
+                    <div className={`p-4 rounded-full mb-3 bg-gray-100`}>{cat.icon}</div>
+                    <span className="font-bold text-gray-700">{cat.name}</span>
+                  </button>
+                ))}
+              </div>
+            );
+          case 'kana':
+            return (
+              <div className="space-y-4 animate-in zoom-in duration-300 pb-20">
+                <div className={`flex items-center justify-center gap-3 mb-4`}>
+                   <div className={`${theme.primaryColor} font-medium`}>{theme.tabLabel}表</div>
+                   {langKey === 'jp' && (
+                     <button onClick={() => setIsKatakana(!isKatakana)} className="bg-white border border-gray-200 px-3 py-1 rounded-full text-xs shadow-sm flex items-center gap-1 active:scale-95 transition-transform">
+                       <Repeat size={12}/> {isKatakana ? '切換平假名' : '切換片假名'}
+                     </button>
+                   )}
+                </div>
+                <div className="bg-white/40 backdrop-blur-sm rounded-2xl p-4 border border-white/50">
+                  {data.alphabet.map((row, idx) => (
+                    <div key={idx}>
+                      {row.title && <div className="text-xs text-gray-400 font-bold mt-3 mb-1 ml-1">{row.title}</div>}
+                      <div className="grid grid-cols-5 gap-2 mb-2">
+                        {row.items.map((item, itemIdx) => (
+                          <CharCell 
+                            key={`${idx}-${itemIdx}`} 
+                            char={langKey === 'jp' ? (isKatakana ? item.k : item.h) : item.k} 
+                            romaji={item.r} 
+                            audio={item.a} 
+                            theme={theme} 
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-center text-gray-500 text-xs mt-2">點擊字母可聽發音 🔈</p>
+              </div>
+            );
+          case 'sos':
+            return (
+              <div className="space-y-4 animate-in slide-in-from-bottom duration-300">
+                <div className={`p-4 rounded-xl border border-red-100 text-center ${theme.sosColor} text-white shadow-lg`}>
+                  <AlertTriangle className="mx-auto mb-2" size={32} />
+                  <p className="font-bold">緊急狀況專用</p>
+                  <p className="text-xs opacity-80">點擊直接全螢幕顯示</p>
+                </div>
+                {data.sos.map((item, idx) => (
+                  <button key={idx} className={`w-full p-4 bg-white border-2 border-red-100 text-red-600 rounded-xl shadow-sm hover:bg-red-50 transition-colors flex items-center justify-between group`} onClick={() => document.getElementById(`sos-btn-${idx}`).click()}>
+                    <span className="font-bold text-lg">{item.text}</span>
+                    <span className="text-sm opacity-80 font-mono">{item.ro}</span>
+                    <Maximize2 size={20} className="opacity-50 group-hover:opacity-100" />
+                    <div id={`sos-btn-${idx}`} className="hidden" onClick={(e) => { e.stopPropagation(); document.querySelector('[aria-label="Fullscreen"]').click() }}></div>
+                    {item.text === "救命！" && <div style={{display:'none'}}><BigTextModal text={item.jp} subText={item.ro} onClose={()=>{}}/></div>}
+                  </button>
+                ))}
+              </div>
+            );
+          default: return null;
+        }
+      };
+
+      return (
+        <div className="min-h-screen relative overflow-hidden font-sans transition-all duration-500" style={{ backgroundColor: theme.bgColor, ...theme.bgStyle }}>
+          
+          {/* 背景動畫：根據語言顯示不同圖案 */}
+          <div className="absolute inset-0 pointer-events-none z-0">
+            {bgItems.map((item) => (
+              <div
+                key={item.id}
+                className={`absolute ${langKey === 'jp' || langKey === 'es' || langKey === 'fr' ? `opacity-70 ${item.color}` : 'opacity-20 text-2xl'}`}
+                style={{
+                  top: `${item.top}%`,
+                  left: `${item.left}%`,
+                  fontSize: (langKey === 'jp') ? undefined : `${item.size}px`,
+                  animation: `float 6s infinite ease-in-out ${item.delay}s`
+                }}
+              >
+                {/* JP: 彩色星星 / 國旗 / 櫻花 */}
+                {langKey === 'jp' && (
+                  item.jpType === 0 ? <Star fill="currentColor" size={item.size} /> :
+                  item.jpType === 1 ? "🇯🇵" : "🌸"
+                )}
+                
+                {/* KR: 巧克力 / 國旗 */}
+                {langKey === 'kr' && (
+                  item.krType === 0 ? "🍫" : "🇰🇷"
+                )}
+
+                {/* ES: 燉飯 / 國旗 */}
+                {langKey === 'es' && (
+                  item.esType === 0 ? "🥘" : "🇪🇸"
+                )}
+
+                {/* FR: 長棍 / 可頌 / 國旗 */}
+                {langKey === 'fr' && (
+                  item.frType === 0 ? "🥖" : item.frType === 1 ? "🥐" : "🇫🇷"
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="relative z-10 w-full max-w-md mx-auto h-screen flex flex-col bg-white/40 shadow-2xl md:my-4 md:h-[95vh] md:rounded-[3rem] overflow-hidden border-2 border-white/50">
+            <header className="pt-6 pb-2 px-6 bg-white/60 backdrop-blur-md z-20 sticky top-0 border-b border-white/50">
+              <div className="flex justify-between items-end">
+                <button onClick={onBack} className="flex items-center text-gray-400 hover:text-gray-600 text-xs mb-1">
+                  <ChevronLeft size={14} /> 重選語言
+                </button>
+              </div>
+              <div className="flex justify-between items-end">
+                <div>
+                  <h1 className={`text-2xl font-black ${theme.primaryColor} tracking-wide flex items-center gap-2`}>
+                    <span className={`${theme.accentColor} ${theme.buttonText} p-1 rounded-lg text-sm border border-white shadow-sm`}>{theme.code}</span>
+                    {theme.name}
+                  </h1>
+                  <p className="text-xs text-gray-500 mt-1 font-medium">{theme.sub}</p>
+                </div>
+                <div className="text-2xl">
+                  {activeTab==='foundation'?'🔰':activeTab==='scenario'?'🚃':activeTab==='kana'? theme.code==='JP'?'あ': theme.code==='KR'?'가': theme.code==='ES'?'Ñ':'Ç' :'🆘'}
+                </div>
+              </div>
+            </header>
+
+            <main className="flex-1 overflow-y-auto p-4 pb-24 scrollbar-hide">{renderContent()}</main>
+
+            <nav className="absolute bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-gray-100 p-2 pb-6 md:pb-2 z-30">
+              <ul className="flex justify-around items-center">
+                {[{ id: 'foundation', label: '基礎', icon: <BookOpen size={20} /> }, { id: 'scenario', label: '情境', icon: <MapPin size={20} /> }, { id: 'kana', label: theme.tabLabel, icon: <Languages size={20} /> }, { id: 'sos', label: '救命', icon: <AlertTriangle size={20} /> }].map(tab => (
+                  <li key={tab.id}>
+                    <button onClick={() => { setActiveTab(tab.id); setSelectedScenario(null); }} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-300 w-16 ${activeTab === tab.id ? `${theme.accentColor} ${theme.buttonText} shadow-lg -translate-y-2 scale-110` : `text-gray-400 hover:${theme.primaryColor}`}`}>
+                      {tab.icon}<span className="text-[10px] font-bold">{tab.label}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      const [screen, setScreen] = useState('splash');
+      const [selectedLang, setSelectedLang] = useState(null);
+      const handleStart = () => setScreen('select');
+      const handleSelectLang = (lang) => { setSelectedLang(lang); setScreen('app'); };
+      const handleBack = () => { setSelectedLang(null); setScreen('select'); };
+      const handleBackToSplash = () => { setScreen('splash'); };
+
+      if (screen === 'splash') return <MainSplash onStart={handleStart} />;
+      if (screen === 'select') return <LanguageSelector onSelect={handleSelectLang} onBack={handleBackToSplash} />;
+      if (screen === 'app' && selectedLang) return <LanguageApp langKey={selectedLang} onBack={handleBack} />;
+      return null;
+    }
+
+    const root = createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
